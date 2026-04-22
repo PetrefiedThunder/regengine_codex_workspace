@@ -1,0 +1,132 @@
+name: Codex Autopilot
+
+on:
+  workflow_dispatch:
+    inputs:
+      auto_merge:
+        description: Enable auto-merge for the generated PR after checks pass.
+        required: false
+        type: boolean
+        default: false
+  schedule:
+    - cron: '17 14 * * 1-5'
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: read
+
+concurrency:
+  group: codex-autopilot
+  cancel-in-progress: false
+
+jobs:
+  autopilot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            pyproject.toml
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run baseline tests
+        run: pytest
+
+      - name: Run Codex
+        id: run_codex
+        uses: openai/codex-action@v1
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          prompt-file: .github/codex/prompts/autobuild.md
+          output-file: /tmp/codex-output.md
+          safety-strategy: drop-sudo
+          sandbox: workspace-write
+          codex-args: '["--full-auto"]'
+
+      - name: Run post-change tests
+        run: pytest
+
+      - name: Write workflow summary
+        if: always()
+        env:
+          CODEX_FINAL_MESSAGE: ${{ steps.run_codex.outputs.final-message }}
+        run: |
+          {
+            echo '## Codex final message'
+            echo
+            printf '%s\n' "$CODEX_FINAL_MESSAGE"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Capture patch artifact
+        if: always()
+        run: |
+          git status --short
+          git diff --binary > /tmp/codex.diff || true
+
+      - name: Upload Codex artifacts
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: codex-autopilot-${{ github.run_number }}
+          if-no-files-found: ignore
+          path: |
+            /tmp/codex-output.md
+            /tmp/codex.diff
+
+      - name: Create or update pull request
+        id: cpr
+        uses: peter-evans/create-pull-request@v8
+        with:
+          token: ${{ secrets.CODEX_PR_TOKEN || github.token }}
+          commit-message: 'chore(codex): autopilot maintenance'
+          committer: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>
+          author: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>
+          branch: codex/autopilot
+          delete-branch: true
+          title: '[Codex] Autopilot maintenance'
+          body: |
+            This pull request was opened automatically by the Codex autopilot workflow.
+
+            - Workflow run: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+            - Prompt file: `.github/codex/prompts/autobuild.md`
+            - Guidance files: `AGENTS.md` and `.agents/skills/regengine-api-contract/SKILL.md`
+            - Transcript + patch: download the workflow artifact from this run
+          labels: |
+            codex
+            autopilot
+          add-paths: |
+            .github/**
+            .agents/**
+            .codex/**
+            AGENTS.md
+            AUTOPILOT_TASKS.md
+            PROMPT_FOR_CODEX.md
+            README.md
+            app/**
+            tests/**
+            pyproject.toml
+            requirements.txt
+
+      - name: Enable auto-merge
+        if: >-
+          steps.cpr.outputs.pull-request-number != '' &&
+          (github.event.inputs.auto_merge == 'true' || vars.CODEX_AUTO_MERGE == 'true')
+        run: gh pr merge --squash --auto "${{ steps.cpr.outputs.pull-request-url }}"
+        env:
+          GH_TOKEN: ${{ secrets.CODEX_PR_TOKEN || github.token }}

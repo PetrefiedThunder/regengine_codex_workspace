@@ -1,0 +1,3 @@
+# Repo-scoped Codex settings.
+# Keep instruction discovery generous so Codex can read AGENTS.md plus repo skills.
+project_doc_max_bytes = 65536

@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>RegEngine Inflow Lab</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <main class="page">
+      <header class="hero">
+        <div>
+          <p class="eyebrow">Codex-ready simulator</p>
+          <h1>RegEngine Inflow Lab</h1>
+          <p class="lede">
+            Generate linked FSMA 204 Critical Tracking Events, post them to a mock or live
+            RegEngine-compatible ingest endpoint, and inspect lineage plus FDA-request exports.
+          </p>
+        </div>
+        <div class="hero-actions">
+          <a class="button secondary" href="/docs" target="_blank" rel="noreferrer">Open API docs</a>
+          <a class="button secondary" href="/api/mock/regengine/export/fda-request" target="_blank" rel="noreferrer">Download mock FDA export</a>
+        </div>
+      </header>
+
+      <section class="panel controls">
+        <h2>Simulator controls</h2>
+        <form id="config-form" class="grid two-up">
+          <label>
+            Source
+            <input id="source" name="source" value="codex-simulator" />
+          </label>
+          <label>
+            Interval seconds
+            <input id="interval" name="interval" type="number" min="0" step="0.1" value="1.5" />
+          </label>
+          <label>
+            Batch size
+            <input id="batchSize" name="batchSize" type="number" min="1" max="100" value="3" />
+          </label>
+          <label>
+            Seed
+            <input id="seed" name="seed" type="number" value="204" />
+          </label>
+          <label>
+            Delivery mode
+            <select id="deliveryMode" name="deliveryMode">
+              <option value="mock" selected>Mock RegEngine</option>
+              <option value="live">Live RegEngine</option>
+              <option value="none">Generate only</option>
+            </select>
+          </label>
+          <label>
+            Live endpoint override
+            <input id="endpoint" name="endpoint" placeholder="https://www.regengine.co/api/v1/webhooks/ingest" />
+          </label>
+          <label>
+            RegEngine API key
+            <input id="apiKey" name="apiKey" type="password" autocomplete="off" />
+          </label>
+          <label>
+            Tenant ID
+            <input id="tenantId" name="tenantId" autocomplete="off" />
+          </label>
+        </form>
+        <div class="actions">
+          <button class="button" id="startBtn" type="button">Start loop</button>
+          <button class="button secondary" id="stopBtn" type="button">Stop</button>
+          <button class="button secondary" id="stepBtn" type="button">Single batch</button>
+          <button class="button danger" id="resetBtn" type="button">Reset state</button>
+        </div>
+        <p class="note" id="statusMessage">Ready.</p>
+      </section>
+
+      <section class="grid stats-grid" id="statsGrid"></section>
+
+      <section class="panel">
+        <div class="section-head">
+          <h2>Recent events</h2>
+          <button class="button secondary" id="refreshBtn" type="button">Refresh</button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>CTE</th>
+                <th>Lot code</th>
+                <th>Product</th>
+                <th>Location</th>
+                <th>Timestamp</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="eventsBody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="section-head">
+          <h2>Lot lineage lookup</h2>
+        </div>
+        <div class="inline-form">
+          <input id="lotLookup" placeholder="Paste a Traceability Lot Code" />
+          <button class="button secondary" id="lineageBtn" type="button">Trace lot</button>
+        </div>
+        <div id="lineageResults" class="lineage-results"></div>
+      </section>
+    </main>
+    <script src="/static/app.js" defer></script>
+  </body>
+</html>
