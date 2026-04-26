@@ -336,6 +336,85 @@ def test_default_data_root_is_used_for_local_and_tenant_paths():
     )
 
 
+def test_operator_tenant_routes_require_basic_auth(monkeypatch):
+    disabled = client.get("/api/operator/tenants")
+    assert disabled.status_code == 403
+    assert disabled.json()["detail"] == "Tenant operations require Basic Auth"
+
+    monkeypatch.setenv("REGENGINE_BASIC_AUTH_USERNAME", "demo-user")
+    monkeypatch.setenv("REGENGINE_BASIC_AUTH_PASSWORD", "demo-pass")
+
+    unauthorized = client.get("/api/operator/tenants")
+    assert unauthorized.status_code == 401
+
+    authorized = client.get(
+        "/api/operator/tenants",
+        headers=basic_auth_header("demo-user", "demo-pass"),
+    )
+    assert authorized.status_code == 200
+    assert "tenants" in authorized.json()
+
+
+def test_operator_can_list_reset_and_delete_tenant_state(monkeypatch):
+    monkeypatch.setenv("REGENGINE_BASIC_AUTH_USERNAME", "demo-user")
+    monkeypatch.setenv("REGENGINE_BASIC_AUTH_PASSWORD", "demo-pass")
+    operator_headers = basic_auth_header("demo-user", "demo-pass")
+    tenant_id = "operator-tenant-alpha"
+    tenant_headers = operator_headers | {"X-RegEngine-Tenant": tenant_id}
+
+    reset = client.post(
+        "/api/simulate/reset",
+        headers=tenant_headers,
+        json={"batch_size": 3, "seed": 204, "delivery": {"mode": "none"}},
+    )
+    assert reset.status_code == 200
+    assert client.post("/api/simulate/step", headers=tenant_headers).status_code == 200
+
+    list_response = client.get("/api/operator/tenants", headers=operator_headers)
+    assert list_response.status_code == 200
+    tenants = {
+        tenant["tenant_id"]: tenant for tenant in list_response.json()["tenants"]
+    }
+    assert tenants[tenant_id]["cached"] is True
+    assert tenants[tenant_id]["running"] is False
+    assert tenants[tenant_id]["total_records"] == 3
+    assert tenants[tenant_id]["persist_path"] == f"data/tenants/{tenant_id}/events.jsonl"
+    assert tenants[tenant_id]["exists_on_disk"] is True
+
+    tenant_reset = client.post(
+        f"/api/operator/tenants/{tenant_id}/reset",
+        headers=operator_headers,
+    )
+    assert tenant_reset.status_code == 200
+    assert tenant_reset.json() == {
+        "status": "reset",
+        "tenant_id": tenant_id,
+        "removed_cached_controller": False,
+        "removed_data": False,
+    }
+    status = client.get("/api/simulate/status", headers=tenant_headers).json()
+    assert status["stats"]["total_records"] == 0
+
+    assert client.post("/api/simulate/step", headers=tenant_headers).status_code == 200
+    tenant_delete = client.delete(
+        f"/api/operator/tenants/{tenant_id}",
+        headers=operator_headers,
+    )
+    assert tenant_delete.status_code == 200
+    assert tenant_delete.json() == {
+        "status": "deleted",
+        "tenant_id": tenant_id,
+        "removed_cached_controller": True,
+        "removed_data": True,
+    }
+    list_after_delete = client.get("/api/operator/tenants", headers=operator_headers)
+    tenant_ids = {tenant["tenant_id"] for tenant in list_after_delete.json()["tenants"]}
+    assert tenant_id not in tenant_ids
+
+    default_delete = client.delete("/api/operator/tenants/local-demo", headers=operator_headers)
+    assert default_delete.status_code == 400
+
+
 def test_scenario_save_load_restores_config_and_event_log(tmp_path):
     scenario_saves.configure(str(tmp_path / "scenario-saves"))
     fresh_path = tmp_path / "fresh-cut-events.jsonl"

@@ -113,6 +113,7 @@ Shared-demo operating notes:
 - Keep `REGENGINE_CORS_ORIGINS` limited to the HTTPS origins that should run the browser dashboard; Basic Auth deployments reject state-changing browser requests from origins outside that list.
 - Mount persistent storage at `REGENGINE_DATA_DIR` so event logs and scenario saves survive restarts.
 - Back up or delete `data/tenants/{tenant_id}/` according to the partner's data-retention expectation.
+- Use the protected `/api/operator/tenants` endpoints to list, reset, or delete tenant scopes instead of shelling into the volume during a live demo.
 
 ## Live Ingest Trial Profile
 
