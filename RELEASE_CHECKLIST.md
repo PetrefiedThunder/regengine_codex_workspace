@@ -21,8 +21,10 @@ Use this checklist before tagging a demo-ready build or handing the simulator to
 ## Operator Flow Checks
 
 - [ ] Dashboard loads without credentials when Basic Auth env vars are unset.
+- [ ] `/api/healthz` remains available without credentials for container/platform healthchecks.
 - [ ] Basic Auth returns `401` without valid credentials when env vars are set.
 - [ ] Shared-demo or live-trial deployments set explicit `REGENGINE_CORS_ORIGINS` values instead of wildcard CORS.
+- [ ] Shared-demo or live-trial deployments set `REGENGINE_DATA_DIR` to mounted persistent storage.
 - [ ] Demo fixture loading resets to a known event log.
 - [ ] Start, stop, single-step, and reset work from the dashboard.
 - [ ] Scenario save/load restores both config and event records.

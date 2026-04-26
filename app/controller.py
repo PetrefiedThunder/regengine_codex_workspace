@@ -63,7 +63,7 @@ class SimulationController:
         self.scenario_saves = scenario_saves
         self.mock_service = mock_service
         self.live_client = live_client
-        self.config = SimulationConfig()
+        self.config = SimulationConfig(persist_path=str(store.persist_path))
         self._task: asyncio.Task[None] | None = None
         self._stop_event = asyncio.Event()
         self._lock = asyncio.Lock()

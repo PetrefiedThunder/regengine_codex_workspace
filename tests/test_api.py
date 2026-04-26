@@ -113,6 +113,10 @@ def test_basic_auth_is_optional_but_enforced_when_configured(monkeypatch):
     monkeypatch.setenv("REGENGINE_BASIC_AUTH_USERNAME", "demo-user")
     monkeypatch.setenv("REGENGINE_BASIC_AUTH_PASSWORD", "demo-pass")
 
+    healthz = client.get("/api/healthz")
+    assert healthz.status_code == 200
+    assert healthz.json()["ok"] is True
+
     unauthorized = client.get("/api/health")
     assert unauthorized.status_code == 401
     assert unauthorized.headers["www-authenticate"] == 'Basic realm="RegEngine Inflow Lab"'
@@ -171,6 +175,16 @@ def test_tenant_header_scopes_event_storage_and_rejects_invalid_ids(tmp_path):
 
     invalid_response = client.get("/api/health", headers={"X-RegEngine-Tenant": "../tenant"})
     assert invalid_response.status_code == 400
+
+
+def test_default_data_root_is_used_for_local_and_tenant_paths():
+    health = client.get("/api/health").json()
+    assert health["status"]["config"]["persist_path"] == "data/events.jsonl"
+
+    tenant_health = client.get("/api/health", headers={"X-RegEngine-Tenant": "tenant-path-check"}).json()
+    assert tenant_health["status"]["config"]["persist_path"] == (
+        "data/tenants/tenant-path-check/events.jsonl"
+    )
 
 
 def test_scenario_save_load_restores_config_and_event_log(tmp_path):

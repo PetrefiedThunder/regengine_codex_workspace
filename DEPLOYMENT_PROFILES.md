@@ -23,6 +23,7 @@ python3 scripts/smoke_regression.py
 Before exposing any profile to another person, verify:
 
 ```bash
+curl http://127.0.0.1:8000/api/healthz
 curl http://127.0.0.1:8000/api/health
 ```
 
@@ -68,6 +69,7 @@ export REGENGINE_BASIC_AUTH_USERNAME=demo
 export REGENGINE_BASIC_AUTH_PASSWORD='replace-with-a-strong-password'
 export REGENGINE_DEFAULT_TENANT=demo-default
 export REGENGINE_CORS_ORIGINS=https://demo.example.com
+export REGENGINE_DATA_DIR=/data
 uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
@@ -109,6 +111,7 @@ Shared-demo operating notes:
 - Use a distinct tenant value per partner or workshop.
 - Rotate `REGENGINE_BASIC_AUTH_PASSWORD` between external demos.
 - Keep `REGENGINE_CORS_ORIGINS` limited to the HTTPS origins that should run the browser dashboard.
+- Mount persistent storage at `REGENGINE_DATA_DIR` so event logs and scenario saves survive restarts.
 - Back up or delete `data/tenants/{tenant_id}/` according to the partner's data-retention expectation.
 
 ## Live Ingest Trial Profile
@@ -122,6 +125,7 @@ export REGENGINE_BASIC_AUTH_USERNAME=demo
 export REGENGINE_BASIC_AUTH_PASSWORD='replace-with-a-strong-password'
 export REGENGINE_DEFAULT_TENANT=live-trial
 export REGENGINE_CORS_ORIGINS=https://live-trial.example.com
+export REGENGINE_DATA_DIR=/data
 uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
@@ -192,10 +196,26 @@ For a persistent local or shared demo service, use the macOS LaunchAgent, Linux 
 - Shared demo: bind to the private interface or proxy target, Basic Auth set, CORS origins explicit.
 - Live trial: prefer private network access, Basic Auth set, CORS origins explicit, and live delivery enabled only per operator action.
 
+## Railway Shared Demo
+
+The repo includes `Dockerfile` and `railway.json` for Railway. Recommended Railway variables:
+
+```bash
+REGENGINE_BASIC_AUTH_USERNAME=demo
+REGENGINE_BASIC_AUTH_PASSWORD=<strong generated password>
+REGENGINE_DEFAULT_TENANT=demo-default
+REGENGINE_CORS_ORIGINS=https://<railway-domain>
+REGENGINE_DATA_DIR=/data
+```
+
+Attach a Railway volume at `/data` before using the service for partner demos. After a Railway domain is generated, update `REGENGINE_CORS_ORIGINS` to that exact HTTPS origin.
+
 ## Profile Verification Checklist
 
 - `GET /api/health` returns the expected tenant and auth context.
+- `GET /api/healthz` returns `{"ok": true, ...}` without credentials for platform healthchecks.
 - Browser requests from the intended HTTPS origin receive the `access-control-allow-origin` response header; untrusted origins do not.
+- `REGENGINE_DATA_DIR` points at mounted persistent storage in shared-demo and live-trial deployments.
 - Dashboard stats match the chosen tenant/auth/storage profile.
 - `POST /api/demo-fixtures/fresh_cut_transformation/load` succeeds in `mock` mode.
 - Lineage for `TLC-DEMO-FC-OUT-001` includes upstream harvest and packed lots.
