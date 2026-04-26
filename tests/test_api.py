@@ -337,6 +337,110 @@ transformation,TLC-FDA-OUT,Fresh Cut Salad Mix,95,cases,ReadyFresh Processing Pl
     assert missing_lot_response.status_code == 400
 
 
+def test_epcis_export_scaffold_maps_lineage_to_jsonld_without_changing_ingest_contract(tmp_path):
+    custom_path = tmp_path / "epcis-events.jsonl"
+    client.post(
+        "/api/simulate/reset",
+        json={
+            "batch_size": 1,
+            "seed": 204,
+            "persist_path": str(custom_path),
+            "delivery": {"mode": "none"},
+        },
+    )
+    load_response = client.post(
+        "/api/demo-fixtures/fresh_cut_transformation/load",
+        json={
+            "source": "epcis-suite",
+            "delivery": {"mode": "none"},
+        },
+    )
+    assert load_response.status_code == 200
+
+    response = client.get(
+        "/api/mock/regengine/export/epcis?traceability_lot_code=TLC-DEMO-FC-OUT-001"
+    )
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("application/ld+json")
+    assert response.headers["content-disposition"] == "attachment; filename=epcis_events.jsonld"
+    document = response.json()
+    assert document["type"] == "EPCISDocument"
+    assert document["schemaVersion"] == "2.0"
+    assert document["sender"] == "epcis-suite"
+
+    events = document["epcisBody"]["eventList"]
+    assert len(events) == 13
+    assert {event["type"] for event in events} == {"ObjectEvent", "TransformationEvent"}
+    assert events[0]["regengine:cteType"] == "harvesting"
+    assert events[0]["quantityList"][0]["epcClass"] == "urn:regengine:lot:TLC-DEMO-FC-HARVEST-001"
+
+    shipping_event = next(event for event in events if event["regengine:cteType"] == "shipping")
+    assert shipping_event["bizStep"] == "urn:epcglobal:cbv:bizstep:shipping"
+    assert shipping_event["disposition"] == "urn:epcglobal:cbv:disp:in_transit"
+    assert shipping_event["bizTransactionList"][0]["regengine:documentNumber"]
+
+    transformation_event = next(event for event in events if event["type"] == "TransformationEvent")
+    assert transformation_event["transformationID"] == "urn:regengine:batch:BATCH-DEMO-FC-001"
+    assert {
+        quantity["regengine:traceabilityLotCode"]
+        for quantity in transformation_event["inputQuantityList"]
+    } == {"TLC-DEMO-FC-PACK-001", "TLC-DEMO-FC-PACK-002"}
+    assert transformation_event["outputQuantityList"][0]["regengine:traceabilityLotCode"] == (
+        "TLC-DEMO-FC-OUT-001"
+    )
+    assert transformation_event["regengine:kdes"]["reference_document_number"] == "BATCH-DEMO-FC-001"
+
+    ingest_response = client.post(
+        "/api/mock/regengine/ingest",
+        json={
+            "source": "contract-check",
+            "events": [
+                {
+                    "cte_type": "receiving",
+                    "traceability_lot_code": "TLC-EP-CHECK",
+                    "product_description": "Romaine Lettuce",
+                    "quantity": 12,
+                    "unit_of_measure": "cases",
+                    "location_name": "Distribution Center #4",
+                    "timestamp": "2026-02-05T08:30:00Z",
+                    "kdes": {},
+                }
+            ],
+        },
+    )
+    assert ingest_response.status_code == 200
+    assert ingest_response.json()["events"][0]["status"] == "accepted"
+
+
+def test_epcis_export_supports_date_filters_and_missing_lot_errors(tmp_path):
+    custom_path = tmp_path / "epcis-date-events.jsonl"
+    client.post(
+        "/api/simulate/reset",
+        json={
+            "batch_size": 1,
+            "seed": 204,
+            "persist_path": str(custom_path),
+            "delivery": {"mode": "none"},
+        },
+    )
+    client.post(
+        "/api/demo-fixtures/fresh_cut_transformation/load",
+        json={"delivery": {"mode": "none"}},
+    )
+
+    filtered_response = client.get(
+        "/api/mock/regengine/export/epcis?start_date=2026-02-07&end_date=2026-02-07"
+    )
+    assert filtered_response.status_code == 200
+    filtered_events = filtered_response.json()["epcisBody"]["eventList"]
+    assert [event["regengine:cteType"] for event in filtered_events] == ["receiving"]
+    assert filtered_events[0]["regengine:traceabilityLotCode"] == "TLC-DEMO-FC-OUT-001"
+
+    missing_response = client.get("/api/mock/regengine/export/epcis?traceability_lot_code=NOPE")
+    assert missing_response.status_code == 404
+
+
 def test_start_applies_configured_persist_path_and_keeps_mock_default(tmp_path):
     custom_path = tmp_path / "start-events.jsonl"
     response = client.post(

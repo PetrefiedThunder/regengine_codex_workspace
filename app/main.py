@@ -15,6 +15,7 @@ from fastapi.staticfiles import StaticFiles
 from .controller import SimulationController
 from .demo_fixtures import list_demo_fixture_summaries
 from .engine import LegitFlowEngine
+from .epcis_export import epcis_filename, render_epcis_document
 from .fda_export import (
     FDA_EXPORT_PRESETS,
     apply_fda_export_preset,
@@ -271,6 +272,32 @@ async def mock_fda_request_export(
         content=csv_text,
         media_type="text/csv",
         headers={"Content-Disposition": f"attachment; filename={export_filename(preset)}"},
+    )
+
+
+@app.get("/api/mock/regengine/export/epcis")
+async def mock_epcis_export(
+    start_date: str | None = Query(default=None, description="Inclusive YYYY-MM-DD"),
+    end_date: str | None = Query(default=None, description="Inclusive YYYY-MM-DD"),
+    traceability_lot_code: str | None = Query(default=None),
+) -> JSONResponse:
+    if traceability_lot_code:
+        records = store.lineage(traceability_lot_code)
+        if not records:
+            raise HTTPException(status_code=404, detail="No records found for that lot code")
+        records = _filter_records_between(records, start_date=start_date, end_date=end_date)
+    else:
+        records = store.all_between(start_date=start_date, end_date=end_date)
+
+    document = render_epcis_document(
+        records,
+        source=controller.config.source,
+        location_gln=engine.location_gln,
+    )
+    return JSONResponse(
+        content=document,
+        media_type="application/ld+json",
+        headers={"Content-Disposition": f"attachment; filename={epcis_filename()}"},
     )
 
 

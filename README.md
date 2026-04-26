@@ -14,6 +14,7 @@ A mock-first FSMA 204 traceability simulator that emits **RegEngine-compatible i
 - [Scenario presets](#scenario-presets)
 - [Demo fixtures](#demo-fixtures)
 - [FDA export presets](#fda-export-presets)
+- [EPCIS 2.0 export scaffolding](#epcis-20-export-scaffolding)
 - [API reference](#api-reference)
 - [RegEngine payload contract](#regengine-payload-contract)
 - [Deployment](#deployment)
@@ -44,6 +45,7 @@ app/
   controller.py          # Simulator lifecycle (start/stop/step/reset)
   demo_fixtures.py       # Deterministic demo playback fixtures
   engine.py              # CTE generation and lot lineage logic
+  epcis_export.py        # EPCIS 2.0 JSON-LD export scaffolding
   fda_export.py          # FDA-request CSV export presets and rendering
   main.py                # FastAPI app and route wiring
   mock_service.py        # Built-in mock RegEngine ingest endpoint
@@ -85,7 +87,7 @@ Then open:
 http://127.0.0.1:8000
 ```
 
-The dashboard lets you choose a scenario preset, load deterministic demo fixtures, start/stop/step/reset the simulator, replay the current persisted event log, import CSV seed lots or scheduled events, inspect recent events, trace lot lineage, and export mock FDA request CSV presets. It subscribes to live status/event snapshots with Server-Sent Events and falls back to refresh polling if the stream disconnects. Delivery mode defaults to **`mock`** so no credentials are required.
+The dashboard lets you choose a scenario preset, load deterministic demo fixtures, start/stop/step/reset the simulator, replay the current persisted event log, import CSV seed lots or scheduled events, inspect recent events, trace lot lineage, and export mock FDA request CSV presets. API users can also derive scaffolded EPCIS 2.0 JSON-LD exports from the same stored records. It subscribes to live status/event snapshots with Server-Sent Events and falls back to refresh polling if the stream disconnects. Delivery mode defaults to **`mock`** so no credentials are required.
 
 Event records are stored as JSONL at `config.persist_path` (`data/events.jsonl` by default). Existing records at that path are loaded when the app starts or when a start/reset request points at a different path; reset clears the currently configured event log. Replay reads the JSONL log without appending, duplicating, or rewriting stored events.
 
@@ -212,6 +214,18 @@ The dashboard fixture loader resets the current event log before loading the sel
 
 If a lot code is supplied, the export is scoped to that lot's transitive lineage before applying the preset filter. `GET /api/mock/regengine/export/presets` returns the preset catalog used by the dashboard.
 
+## EPCIS 2.0 export scaffolding
+
+`GET /api/mock/regengine/export/epcis` derives a scaffolded EPCIS 2.0 JSON-LD document from stored simulator records. This is intentionally additive: it does not change live RegEngine ingest payloads, the mock ingest route, or the FDA CSV export shape.
+
+Supported query parameters:
+
+- `start_date`: optional inclusive `YYYY-MM-DD`
+- `end_date`: optional inclusive `YYYY-MM-DD`
+- `traceability_lot_code`: optional lot code; when supplied, the export uses the same transitive lineage graph as `/api/lineage/{traceability_lot_code}`
+
+The export returns an `EPCISDocument` with `ObjectEvent` records for harvesting, cooling, packing, shipping, and receiving CTEs, plus `TransformationEvent` records for transformation CTEs. RegEngine-specific fields are preserved under the `regengine:` JSON-LD namespace so KDEs, parent lot codes, document references, product descriptions, and original CTE types remain visible while the current webhook contract stays unchanged.
+
 ## API reference
 
 ### Simulator control
@@ -246,6 +260,7 @@ If a lot code is supplied, the export is scoped to that lot's transitive lineage
 | `POST` | `/api/mock/regengine/ingest` | Accepts RegEngine-shaped payloads |
 | `GET` | `/api/mock/regengine/export/presets` | List FDA request export presets |
 | `GET` | `/api/mock/regengine/export/fda-request` | Mock 11-column FDA request CSV |
+| `GET` | `/api/mock/regengine/export/epcis` | Scaffolded EPCIS 2.0 JSON-LD export |
 
 ### Example: start the simulator in live mode
 
@@ -358,6 +373,12 @@ The lineage response keeps the original `records[]` event timeline and adds `nod
 curl "http://127.0.0.1:8000/api/mock/regengine/export/fda-request?preset=lot_trace&traceability_lot_code=TLC-20260421-000003"
 ```
 
+### Example: export a lot-trace EPCIS scaffold
+
+```bash
+curl "http://127.0.0.1:8000/api/mock/regengine/export/epcis?traceability_lot_code=TLC-20260421-000003"
+```
+
 ## RegEngine payload contract
 
 The live delivery client targets the current RegEngine webhook shape:
@@ -388,7 +409,7 @@ The live delivery client targets the current RegEngine webhook shape:
 }
 ```
 
-The mock FDA export mirrors RegEngine's documented 11-column request export shape.
+The mock FDA export mirrors RegEngine's documented 11-column request export shape. The EPCIS 2.0 export is a separate derived JSON-LD scaffold and does not change this webhook contract.
 
 ## Deployment
 
