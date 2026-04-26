@@ -9,7 +9,8 @@ from typing import Any, Iterable
 from .models import LineageEdge, LineageNode, StoredEventRecord
 
 
-MASKED_SECRET = "***MASKED***"
+# Sentinel that replaces secrets in scrubbed output. Not a credential.
+MASKED_SECRET = "***MASKED***"  # nosec B105
 SECRET_FIELD_NAMES = {"api_key", "apikey", "x_regengine_api_key", "authorization"}
 
 
