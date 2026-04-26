@@ -41,6 +41,10 @@ This file is the standing backlog for unattended Codex runs.
 
 - [x] Restrict credentialed CORS to configured browser origins for shared demo and live-ingest profiles.
 
+## Priority 6
+
+- [x] Add container/Railway deployment artifacts with persistent data-directory support.
+
 ## Progress notes
 
 - Start with the smallest safe change that materially improves demo readiness.

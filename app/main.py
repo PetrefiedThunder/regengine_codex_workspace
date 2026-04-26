@@ -66,12 +66,13 @@ from .scenarios import ScenarioId, list_scenario_summaries
 from .store import EventStore
 
 
-TENANT_DATA_ROOT = Path("data/tenants")
+DATA_ROOT = Path(os.getenv("REGENGINE_DATA_DIR", "data"))
+TENANT_DATA_ROOT = DATA_ROOT / "tenants"
 DEFAULT_CORS_ORIGINS = ("http://127.0.0.1:8000", "http://localhost:8000")
 
 engine = LegitFlowEngine(seed=204)
-store = EventStore(persist_path="data/events.jsonl")
-scenario_saves = ScenarioSaveStore()
+store = EventStore(persist_path=str(DATA_ROOT / "events.jsonl"))
+scenario_saves = ScenarioSaveStore(save_dir=str(DATA_ROOT / "scenario_saves"))
 mock_service = MockRegEngineService()
 controller = SimulationController(
     engine=engine,
@@ -144,7 +145,7 @@ app.add_middleware(
 
 @app.middleware("http")
 async def auth_and_tenant_middleware(request: Request, call_next):
-    if request.method == "OPTIONS":
+    if request.method == "OPTIONS" or request.url.path == "/api/healthz":
         return await call_next(request)
 
     context = tenant_context_from_request(request)
@@ -176,6 +177,14 @@ async def health(request: Request) -> dict[str, Any]:
             "uses_default_storage": context.uses_default_storage,
         },
         "status": active_controller.status(),
+    }
+
+
+@app.get("/api/healthz")
+async def healthz() -> dict[str, Any]:
+    return {
+        "ok": True,
+        "utc_time": datetime.now(UTC).isoformat(),
     }
 
 

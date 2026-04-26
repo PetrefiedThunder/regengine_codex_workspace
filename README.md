@@ -68,13 +68,17 @@ app/
 scripts/
   smoke_regression.py    # End-to-end API smoke for demo-ready release checks
 tests/
+.dockerignore
 AGENTS.md                # Repository instructions for Codex-style agents
 AUTOPILOT_TASKS.md       # Standing backlog for unattended runs
 DEPLOYMENT_PROFILES.md   # Local, shared-demo, and live-ingest run profiles
 DESIGN_PARTNER_DEMO_SCRIPT.md  # Design-partner walkthrough and reset script
+Dockerfile               # Container image for shared demo deployments
+docker-entrypoint.sh     # Chowns mounted data dir, then drops to app user
 PROMPT_FOR_CODEX.md      # Paste-ready Codex task prompt
 RELEASE_CHECKLIST.md     # Demo-ready release gate
 pyproject.toml
+railway.json             # Railway Docker build and healthcheck config
 requirements.txt
 ```
 
@@ -100,7 +104,7 @@ http://127.0.0.1:8000
 
 The dashboard lets you choose a scenario preset, save/load per-scenario demo states, load deterministic demo fixtures, start/stop/step/reset the simulator, replay the current persisted event log, import CSV seed lots or scheduled events, inspect recent events, trace lot lineage, see the active tenant/auth/storage context, and export mock FDA request CSV presets plus scaffolded EPCIS 2.0 JSON-LD exports. It subscribes to live status/event snapshots with Server-Sent Events and falls back to refresh polling if the stream disconnects. Delivery mode defaults to **`mock`** so no credentials are required.
 
-Event records are stored as JSONL at `config.persist_path` (`data/events.jsonl` by default for local unauthenticated use). Existing records at that path are loaded when the app starts or when a start/reset request points at a different path; reset clears the currently configured event log. Tenant-scoped requests store records under `data/tenants/{tenant_id}/events.jsonl` and ignore untrusted persist-path overrides. Replay reads the JSONL log without appending, duplicating, or rewriting stored events.
+Event records are stored as JSONL at `config.persist_path` (`data/events.jsonl` by default for local unauthenticated use). Set `REGENGINE_DATA_DIR` to move the default event log, tenant logs, and scenario saves under another directory such as `/data` for a mounted deployment volume. Existing records at that path are loaded when the app starts or when a start/reset request points at a different path; reset clears the currently configured event log. Tenant-scoped requests store records under `{REGENGINE_DATA_DIR}/tenants/{tenant_id}/events.jsonl` and ignore untrusted persist-path overrides. Replay reads the JSONL log without appending, duplicating, or rewriting stored events.
 
 ## Running tests
 
@@ -296,7 +300,8 @@ The service wrapper examples below can be used with any profile; keep the profil
 
 | Method | Path | Purpose |
 |---|---|---|
-| `GET` | `/api/health` | Liveness probe, tenant/auth context, and current config snapshot |
+| `GET` | `/api/health` | Authenticated liveness probe, tenant/auth context, and current config snapshot |
+| `GET` | `/api/healthz` | Unauthenticated platform/container healthcheck |
 | `GET` | `/api/scenarios` | List available scenario presets |
 | `GET` | `/api/scenario-saves` | List saved per-scenario demo states |
 | `POST` | `/api/scenario-saves/{scenario_id}` | Save the current or supplied config and event log for a scenario |
@@ -576,24 +581,20 @@ journalctl -u regengine -f    # live logs
 
 ### Docker (optional)
 
-A minimal image is straightforward:
-
-```dockerfile
-FROM python:3.12-slim
-WORKDIR /app
-COPY requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
-COPY . .
-EXPOSE 8000
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
-```
-
-Build and run:
+The repository ships with a production-oriented `Dockerfile`. The entrypoint prepares the mounted data directory, drops to a non-root app user for Uvicorn, stores default simulator data under `/data`, and includes a healthcheck for `/api/healthz`.
 
 ```bash
 docker build -t regengine-inflow-lab .
-docker run --rm -p 8000:8000 regengine-inflow-lab
+docker run --rm \
+  -p 8000:8000 \
+  -v "$PWD/data:/data" \
+  -e REGENGINE_BASIC_AUTH_USERNAME=demo \
+  -e REGENGINE_BASIC_AUTH_PASSWORD=change-me \
+  -e REGENGINE_CORS_ORIGINS=http://127.0.0.1:8000 \
+  regengine-inflow-lab
 ```
+
+`railway.json` uses the same Dockerfile and healthcheck for Railway deployments. Mount persistent storage at `/data` and keep `REGENGINE_DATA_DIR=/data`.
 
 ## Logs and troubleshooting
 
