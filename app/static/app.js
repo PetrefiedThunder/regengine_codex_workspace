@@ -9,6 +9,9 @@ const state = {
     fresh_cut_processor: 'Fresh-cut processor',
     retailer_readiness_demo: 'Retailer readiness demo',
   },
+  exportPresetDescriptions: {
+    all_records: 'Full FDA-request export for the selected date range.',
+  },
 };
 
 const ids = {
@@ -24,6 +27,12 @@ const ids = {
   csvImportType: document.getElementById('csvImportType'),
   csvFile: document.getElementById('csvFile'),
   importResults: document.getElementById('importResults'),
+  exportPreset: document.getElementById('exportPreset'),
+  exportLot: document.getElementById('exportLot'),
+  exportStartDate: document.getElementById('exportStartDate'),
+  exportEndDate: document.getElementById('exportEndDate'),
+  exportDownloadLink: document.getElementById('exportDownloadLink'),
+  exportPresetDescription: document.getElementById('exportPresetDescription'),
   statusMessage: document.getElementById('statusMessage'),
   statsGrid: document.getElementById('statsGrid'),
   deliverySummary: document.getElementById('deliverySummary'),
@@ -96,6 +105,47 @@ function renderScenarioOptions(scenarios) {
 async function loadScenarios() {
   const payload = await api('/api/scenarios');
   renderScenarioOptions(payload.scenarios || []);
+}
+
+function renderExportPresetOptions(presets) {
+  const selected = ids.exportPreset.value || 'all_records';
+  state.exportPresetDescriptions = Object.fromEntries(
+    presets.map((preset) => [preset.id, preset.description]),
+  );
+  ids.exportPreset.innerHTML = presets
+    .map(
+      (preset) => `
+        <option value="${escapeHtml(preset.id)}">${escapeHtml(preset.label)}</option>
+      `,
+    )
+    .join('');
+  ids.exportPreset.value = state.exportPresetDescriptions[selected] ? selected : presets[0]?.id || 'all_records';
+  updateExportLink();
+}
+
+async function loadExportPresets() {
+  const payload = await api('/api/mock/regengine/export/presets');
+  renderExportPresetOptions(payload.presets || []);
+}
+
+function updateExportLink() {
+  const params = new URLSearchParams();
+  const preset = ids.exportPreset.value || 'all_records';
+  const lotCode = ids.exportLot.value.trim();
+  const startDate = ids.exportStartDate.value;
+  const endDate = ids.exportEndDate.value;
+  params.set('preset', preset);
+  if (lotCode) {
+    params.set('traceability_lot_code', lotCode);
+  }
+  if (startDate) {
+    params.set('start_date', startDate);
+  }
+  if (endDate) {
+    params.set('end_date', endDate);
+  }
+  ids.exportDownloadLink.href = `/api/mock/regengine/export/fda-request?${params.toString()}`;
+  ids.exportPresetDescription.textContent = state.exportPresetDescriptions[preset] || 'FDA-request CSV export.';
 }
 
 function renderStats(status) {
@@ -613,8 +663,15 @@ document.getElementById('retryFailedBtn').addEventListener('click', retryFailedD
 document.getElementById('resetBtn').addEventListener('click', resetState);
 document.getElementById('refreshBtn').addEventListener('click', refresh);
 document.getElementById('lineageBtn').addEventListener('click', lookupLineage);
+ids.exportPreset.addEventListener('change', updateExportLink);
+ids.exportLot.addEventListener('input', updateExportLink);
+ids.exportStartDate.addEventListener('change', updateExportLink);
+ids.exportEndDate.addEventListener('change', updateExportLink);
 
 loadScenarios().catch((error) => {
+  setStatus(error.message, 'error', 5000);
+});
+loadExportPresets().catch((error) => {
   setStatus(error.message, 'error', 5000);
 });
 connectLiveUpdates();

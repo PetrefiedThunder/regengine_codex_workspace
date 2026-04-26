@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import csv
-import io
 import json
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
@@ -16,6 +14,13 @@ from fastapi.staticfiles import StaticFiles
 
 from .controller import SimulationController
 from .engine import LegitFlowEngine
+from .fda_export import (
+    FDA_EXPORT_PRESETS,
+    apply_fda_export_preset,
+    export_filename,
+    list_fda_export_preset_summaries,
+    render_fda_request_csv,
+)
 from .mock_service import MockRegEngineService
 from .models import (
     CSVImportRequest,
@@ -23,6 +28,9 @@ from .models import (
     DeliveryRetryRequest,
     DeliveryRetryResponse,
     EventListResponse,
+    FDAExportPreset,
+    FDAExportPresetListResponse,
+    FDAExportPresetSummary,
     IngestPayload,
     LineageResponse,
     MockIngestResponse,
@@ -205,49 +213,57 @@ async def mock_regengine_ingest(payload: IngestPayload) -> MockIngestResponse:
     return mock_service.ingest(payload)
 
 
+@app.get("/api/mock/regengine/export/presets", response_model=FDAExportPresetListResponse)
+async def mock_fda_request_export_presets() -> FDAExportPresetListResponse:
+    return FDAExportPresetListResponse(
+        presets=[
+            FDAExportPresetSummary.model_validate(summary)
+            for summary in list_fda_export_preset_summaries()
+        ]
+    )
+
+
 @app.get("/api/mock/regengine/export/fda-request")
 async def mock_fda_request_export(
     start_date: str | None = Query(default=None, description="Inclusive YYYY-MM-DD"),
     end_date: str | None = Query(default=None, description="Inclusive YYYY-MM-DD"),
+    preset: FDAExportPreset = Query(default=FDAExportPreset.ALL_RECORDS),
+    traceability_lot_code: str | None = Query(default=None),
 ) -> PlainTextResponse:
-    columns = [
-        "Traceability Lot Code",
-        "Traceability Lot Code Description",
-        "Product Description",
-        "Quantity",
-        "Unit of Measure",
-        "Location Description",
-        "Location Identifier (GLN)",
-        "Date",
-        "Time",
-        "Reference Document Type",
-        "Reference Document Number",
-    ]
-    output = io.StringIO()
-    writer = csv.DictWriter(output, fieldnames=columns)
-    writer.writeheader()
-    for record in store.all_between(start_date=start_date, end_date=end_date):
-        event = record.event
-        writer.writerow(
-            {
-                "Traceability Lot Code": event.traceability_lot_code,
-                "Traceability Lot Code Description": event.cte_type.value,
-                "Product Description": event.product_description,
-                "Quantity": event.quantity,
-                "Unit of Measure": event.unit_of_measure,
-                "Location Description": event.location_name,
-                "Location Identifier (GLN)": engine.location_gln(event.location_name),
-                "Date": event.timestamp.date().isoformat(),
-                "Time": event.timestamp.time().isoformat(timespec="seconds"),
-                "Reference Document Type": event.kdes.get("reference_document_type", ""),
-                "Reference Document Number": event.kdes.get("reference_document_number", ""),
-            }
-        )
+    definition = FDA_EXPORT_PRESETS[preset]
+    if definition.requires_lot_code and not traceability_lot_code:
+        raise HTTPException(status_code=400, detail="traceability_lot_code is required for this export preset")
+
+    if traceability_lot_code:
+        records = store.lineage(traceability_lot_code)
+        if not records:
+            raise HTTPException(status_code=404, detail="No records found for that lot code")
+        records = _filter_records_between(records, start_date=start_date, end_date=end_date)
+    else:
+        records = store.all_between(start_date=start_date, end_date=end_date)
+    records = apply_fda_export_preset(records, preset)
+    csv_text = render_fda_request_csv(records, location_gln=engine.location_gln)
     return PlainTextResponse(
-        content=output.getvalue(),
+        content=csv_text,
         media_type="text/csv",
-        headers={"Content-Disposition": "attachment; filename=fda_request_export.csv"},
+        headers={"Content-Disposition": f"attachment; filename={export_filename(preset)}"},
     )
+
+
+def _filter_records_between(
+    records: list[Any],
+    start_date: str | None = None,
+    end_date: str | None = None,
+) -> list[Any]:
+    filtered = []
+    for record in records:
+        day = record.event.timestamp.date().isoformat()
+        if start_date and day < start_date:
+            continue
+        if end_date and day > end_date:
+            continue
+        filtered.append(record)
+    return sorted(filtered, key=lambda record: record.event.timestamp)
 
 
 @app.exception_handler(ValueError)
