@@ -17,6 +17,8 @@ A mock-first FSMA 204 traceability simulator that emits **RegEngine-compatible i
 - [Demo fixtures](#demo-fixtures)
 - [FDA export presets](#fda-export-presets)
 - [EPCIS 2.0 export scaffolding](#epcis-20-export-scaffolding)
+- [Design-partner demo script](#design-partner-demo-script)
+- [Deployment profiles](#deployment-profiles)
 - [API reference](#api-reference)
 - [RegEngine payload contract](#regengine-payload-contract)
 - [Deployment](#deployment)
@@ -68,6 +70,8 @@ scripts/
 tests/
 AGENTS.md                # Repository instructions for Codex-style agents
 AUTOPILOT_TASKS.md       # Standing backlog for unattended runs
+DEPLOYMENT_PROFILES.md   # Local, shared-demo, and live-ingest run profiles
+DESIGN_PARTNER_DEMO_SCRIPT.md  # Design-partner walkthrough and reset script
 PROMPT_FOR_CODEX.md      # Paste-ready Codex task prompt
 RELEASE_CHECKLIST.md     # Demo-ready release gate
 pyproject.toml
@@ -116,7 +120,7 @@ python3 scripts/smoke_regression.py
 
 The smoke harness uses FastAPI's in-process `TestClient` to exercise the operator-critical path: tenant-scoped fixture load, lineage lookup, FDA export, EPCIS export, scenario save/load, replay, and tenant isolation. If Basic Auth env vars are set, it sends matching Basic credentials automatically. Temporary smoke tenants are cleaned up after the run.
 
-Use `RELEASE_CHECKLIST.md` as the full demo-ready gate.
+Use `RELEASE_CHECKLIST.md` as the full demo-ready gate. Use `DESIGN_PARTNER_DEMO_SCRIPT.md` for the call flow, expected talking points, fixture reset commands, and recovery steps.
 
 ## Delivery modes
 
@@ -263,6 +267,20 @@ Supported query parameters:
 The dashboard exposes a `Download EPCIS` control beside the FDA CSV export. It uses the same optional lot code and date filters as the CSV export panel, but does not apply FDA-only preset filters.
 
 The export returns an `EPCISDocument` with `ObjectEvent` records for harvesting, cooling, packing, shipping, and receiving CTEs, plus `TransformationEvent` records for transformation CTEs. RegEngine-specific fields are preserved under the `regengine:` JSON-LD namespace so KDEs, parent lot codes, document references, product descriptions, and original CTE types remain visible while the current webhook contract stays unchanged.
+
+## Design-partner demo script
+
+`DESIGN_PARTNER_DEMO_SCRIPT.md` contains a repeatable design-partner walkthrough with pre-demo verification, talking points, expected dashboard states, lot codes to inspect, FDA/EPCIS export checks, reset commands, and recovery notes. The default path uses the deterministic `fresh_cut_transformation` fixture and keeps delivery in mock mode.
+
+## Deployment profiles
+
+`DEPLOYMENT_PROFILES.md` defines three operator profiles:
+
+- Local demo: bind to `127.0.0.1`, no Basic Auth, default local storage, mock delivery.
+- Shared demo: Basic Auth enabled, tenant-scoped storage, mock delivery, and HTTPS/proxy guidance.
+- Live ingest trial: shared-demo protections plus an explicit one-batch live delivery workflow using the documented RegEngine endpoint.
+
+The service wrapper examples below can be used with any profile; keep the profile's bind address, auth, tenant, and delivery safeguards intact.
 
 ## API reference
 
