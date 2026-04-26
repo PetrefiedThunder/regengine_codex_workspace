@@ -34,8 +34,8 @@ This file is the standing backlog for unattended Codex runs.
 
 - [x] Add release smoke regression harness and checklist.
 - [x] Add tenant/auth status and EPCIS export controls to the dashboard.
-- [ ] Add a design-partner demo script with expected talking points and reset steps.
-- [ ] Add deployment profile examples for local, shared demo, and live-ingest modes.
+- [x] Add a design-partner demo script with expected talking points and reset steps.
+- [x] Add deployment profile examples for local, shared demo, and live-ingest modes.
 
 ## Progress notes
 
