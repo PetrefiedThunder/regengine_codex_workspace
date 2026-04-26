@@ -47,6 +47,12 @@ const ids = {
   epcisDownloadLink: document.getElementById('epcisDownloadLink'),
   exportPresetDescription: document.getElementById('exportPresetDescription'),
   statusMessage: document.getElementById('statusMessage'),
+  nextActionText: document.getElementById('nextActionText'),
+  tenantBadge: document.getElementById('tenantBadge'),
+  deliveryModePill: document.getElementById('deliveryModePill'),
+  buildBadge: document.getElementById('buildBadge'),
+  liveDeliveryWarning: document.getElementById('liveDeliveryWarning'),
+  runStatePill: document.getElementById('runStatePill'),
   statsGrid: document.getElementById('statsGrid'),
   deliverySummary: document.getElementById('deliverySummary'),
   retryFailedBtn: document.getElementById('retryFailedBtn'),
@@ -249,23 +255,55 @@ function updateExportLink() {
   ids.exportPresetDescription.textContent = `${presetDescription} EPCIS uses the same lot and date filters.`;
 }
 
+function preferredTraceLot(lotCodes = []) {
+  return lotCodes.find((lotCode) => /OUT|TRANSFORM|FC/i.test(lotCode)) || lotCodes.at(-1) || '';
+}
+
+function nextAction(status, events, deliveryMode) {
+  const delivery = status?.stats?.delivery || {};
+  if (deliveryMode === 'live') {
+    return 'Confirm live credentials';
+  }
+  if (Number(delivery.retryable || 0) > 0) {
+    return 'Retry failed deliveries';
+  }
+  if (!events.length) {
+    return 'Load fixture';
+  }
+  if (!ids.lotLookup.value.trim()) {
+    return 'Trace a lot';
+  }
+  return 'Export evidence';
+}
+
+function updateShellStatus(status = state.status, events = state.events, health = state.health) {
+  const deliveryMode = status?.config?.delivery?.mode || ids.deliveryMode.value || 'mock';
+  const build = health?.build || {};
+  ids.tenantBadge.textContent = health?.tenant || 'local-demo';
+  ids.deliveryModePill.textContent = deliveryMode;
+  ids.deliveryModePill.dataset.tone = deliveryMode === 'live' ? 'error' : deliveryMode === 'mock' ? 'success' : 'neutral';
+  ids.runStatePill.textContent = status?.running ? 'Running' : 'Stopped';
+  ids.runStatePill.dataset.tone = status?.running ? 'success' : 'neutral';
+  ids.buildBadge.textContent = build.commit_sha_short ? `${build.version || '0.1.0'} ${build.commit_sha_short}` : build.version || '0.1.0';
+  ids.liveDeliveryWarning.hidden = deliveryMode !== 'live';
+  ids.nextActionText.textContent = nextAction(status, events || [], deliveryMode);
+}
+
 function renderStats(status) {
   const stats = status?.stats || {};
   const engine = stats.engine || {};
   const scenarioId = status?.config?.scenario || ids.scenario.value;
   const health = state.health || {};
   const auth = health.auth || {};
-  const tenant = health.tenant || 'local-demo';
   const authState = auth.enabled ? 'Enabled' : 'Off';
   const storageScope = auth.uses_default_storage === false ? 'Tenant' : 'Local';
   const cards = [
-    ['Tenant', tenant],
-    ['Auth', authState],
-    ['Storage scope', storageScope],
     ['Loop status', status?.running ? 'Running' : 'Stopped'],
     ['Scenario', scenarioLabel(scenarioId)],
     ['Total records', stats.total_records ?? 0],
     ['Unique lots', stats.unique_lots ?? 0],
+    ['Auth', authState],
+    ['Storage', storageScope],
     ['Persist path', stats.persist_path ?? 'data/events.jsonl'],
     ['Harvested queue', engine.harvested ?? 0],
     ['In transit', engine.in_transit ?? 0],
@@ -373,7 +411,7 @@ function renderEvents(events) {
   if (!events.length) {
     ids.eventsBody.innerHTML = `
       <tr>
-        <td colspan="9" class="empty-state">No events yet.</td>
+        <td colspan="9" class="empty-state">No events yet. Load a fixture or run a single batch.</td>
       </tr>
     `;
     return;
@@ -563,6 +601,7 @@ function renderSnapshot(status, events, health = state.health) {
   state.status = status;
   state.health = health;
   state.events = events;
+  updateShellStatus(status, events, health);
   renderStats(status);
   renderDeliverySummary(status);
   renderEvents(events);
@@ -661,6 +700,12 @@ async function stopLoop() {
 async function stepOnce() {
   try {
     const result = await api('/api/simulate/step', { method: 'POST' });
+    const traceLot = preferredTraceLot(result.lot_codes || []);
+    if (traceLot) {
+      ids.lotLookup.value = traceLot;
+      ids.exportLot.value = traceLot;
+      updateExportLink();
+    }
     if (result.delivery_status === 'failed') {
       setStatus(`Generated ${result.generated} event(s), but delivery failed: ${result.error || 'delivery error'}`, 'error', 7000);
     } else if (result.delivery_status === 'generated') {
@@ -749,6 +794,12 @@ async function loadSelectedDemoFixture() {
     });
     ids.scenario.value = result.scenario;
     ids.lineageResults.innerHTML = '';
+    const traceLot = preferredTraceLot(result.lot_codes || []);
+    if (traceLot) {
+      ids.lotLookup.value = traceLot;
+      ids.exportLot.value = traceLot;
+      updateExportLink();
+    }
     if (result.status === 'delivery_failed') {
       setStatus(`Loaded ${result.stored} fixture event(s), but delivery failed: ${result.error || 'delivery error'}`, 'error', 7000);
     } else if (result.delivery_mode === 'none') {
@@ -862,6 +913,7 @@ ids.exportPreset.addEventListener('change', updateExportLink);
 ids.exportLot.addEventListener('input', updateExportLink);
 ids.exportStartDate.addEventListener('change', updateExportLink);
 ids.exportEndDate.addEventListener('change', updateExportLink);
+ids.deliveryMode.addEventListener('change', () => updateShellStatus());
 
 loadScenarios().catch((error) => {
   setStatus(error.message, 'error', 5000);

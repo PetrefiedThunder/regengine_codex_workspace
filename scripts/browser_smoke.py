@@ -129,6 +129,7 @@ def _run_dashboard_smoke(base_url: str, config: BrowserSmokeConfig) -> None:
             page.goto(base_url, wait_until="domcontentloaded")
             expect(page.get_by_role("heading", name="RegEngine Inflow Lab")).to_be_visible()
 
+            page.locator("#advancedConfig").evaluate("element => { element.open = true; }")
             page.locator("#batchSize").fill("1")
             page.locator("#interval").fill("0.1")
             page.locator("#deliveryMode").select_option("mock")
