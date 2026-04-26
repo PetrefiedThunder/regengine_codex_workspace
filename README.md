@@ -12,6 +12,7 @@ A mock-first FSMA 204 traceability simulator that emits **RegEngine-compatible i
 - [Replay mode](#replay-mode)
 - [CSV import](#csv-import)
 - [Scenario presets](#scenario-presets)
+- [FDA export presets](#fda-export-presets)
 - [API reference](#api-reference)
 - [RegEngine payload contract](#regengine-payload-contract)
 - [Deployment](#deployment)
@@ -41,6 +42,7 @@ Each event is persisted with `event_id`, `sha256_hash`, and `chain_hash` so the 
 app/
   controller.py          # Simulator lifecycle (start/stop/step/reset)
   engine.py              # CTE generation and lot lineage logic
+  fda_export.py          # FDA-request CSV export presets and rendering
   main.py                # FastAPI app and route wiring
   mock_service.py        # Built-in mock RegEngine ingest endpoint
   models.py              # Pydantic models for config, events, payloads
@@ -81,7 +83,7 @@ Then open:
 http://127.0.0.1:8000
 ```
 
-The dashboard lets you choose a scenario preset, start/stop/step/reset the simulator, replay the current persisted event log, import CSV seed lots or scheduled events, inspect recent events, trace lot lineage, and export a mock FDA request CSV. It subscribes to live status/event snapshots with Server-Sent Events and falls back to refresh polling if the stream disconnects. Delivery mode defaults to **`mock`** so no credentials are required.
+The dashboard lets you choose a scenario preset, start/stop/step/reset the simulator, replay the current persisted event log, import CSV seed lots or scheduled events, inspect recent events, trace lot lineage, and export mock FDA request CSV presets. It subscribes to live status/event snapshots with Server-Sent Events and falls back to refresh polling if the stream disconnects. Delivery mode defaults to **`mock`** so no credentials are required.
 
 Event records are stored as JSONL at `config.persist_path` (`data/events.jsonl` by default). Existing records at that path are loaded when the app starts or when a start/reset request points at a different path; reset clears the currently configured event log. Replay reads the JSONL log without appending, duplicating, or rewriting stored events.
 
@@ -185,6 +187,15 @@ Use `config.scenario` to pick a deterministic product/location/flow mix without 
 
 Scenario selection is available in the dashboard, in `SimulationConfig`, and via `GET /api/scenarios`. The default is `leafy_greens_supplier`, and delivery still defaults to **`mock`**.
 
+## FDA export presets
+
+`GET /api/mock/regengine/export/fda-request` still returns the same 11-column FDA request CSV and remains backward compatible with optional `start_date` and `end_date` filters. It now also accepts:
+
+- `preset`: one of `all_records`, `lot_trace`, `shipment_handoff`, `receiving_log`, or `transformation_batches`
+- `traceability_lot_code`: optional for most presets, required for `lot_trace`
+
+If a lot code is supplied, the export is scoped to that lot's transitive lineage before applying the preset filter. `GET /api/mock/regengine/export/presets` returns the preset catalog used by the dashboard.
+
 ## API reference
 
 ### Simulator control
@@ -215,6 +226,7 @@ Scenario selection is available in the dashboard, in `SimulationConfig`, and via
 | Method | Path | Purpose |
 |---|---|---|
 | `POST` | `/api/mock/regengine/ingest` | Accepts RegEngine-shaped payloads |
+| `GET` | `/api/mock/regengine/export/presets` | List FDA request export presets |
 | `GET` | `/api/mock/regengine/export/fda-request` | Mock 11-column FDA request CSV |
 
 ### Example: start the simulator in live mode
@@ -308,6 +320,12 @@ curl http://127.0.0.1:8000/api/lineage/TLC-20260421-000003
 ```
 
 The lineage response keeps the original `records[]` event timeline and adds `nodes[]` plus `edges[]` so transformed outputs can be displayed as a lot graph. `nodes[]` summarizes each related lot, and `edges[]` links source/input lot codes to downstream packed or transformed lots.
+
+### Example: export a lot-trace FDA request slice
+
+```bash
+curl "http://127.0.0.1:8000/api/mock/regengine/export/fda-request?preset=lot_trace&traceability_lot_code=TLC-20260421-000003"
+```
 
 ## RegEngine payload contract
 

@@ -1,4 +1,6 @@
 import asyncio
+import csv
+import io
 import json
 
 from fastapi.testclient import TestClient
@@ -131,6 +133,91 @@ def test_fda_export_shape_contains_expected_columns():
     assert "Traceability Lot Code" in csv_text
     assert "Location Identifier (GLN)" in csv_text
     assert "Reference Document Number" in csv_text
+
+
+def parse_export_rows(csv_text: str) -> list[dict[str, str]]:
+    return list(csv.DictReader(io.StringIO(csv_text)))
+
+
+def test_fda_export_presets_filter_common_request_slices(tmp_path):
+    custom_path = tmp_path / "fda-preset-events.jsonl"
+    client.post(
+        "/api/simulate/reset",
+        json={
+            "batch_size": 1,
+            "seed": 204,
+            "persist_path": str(custom_path),
+            "delivery": {"mode": "none"},
+        },
+    )
+    csv_text = """cte_type,traceability_lot_code,product_description,quantity,unit_of_measure,location_name,timestamp,source_traceability_lot_code,input_traceability_lot_codes,reference_document_type,reference_document_number
+harvesting,TLC-FDA-HARVEST,Romaine Lettuce,120,cases,Valley Fresh Farms,2026-02-05T08:00:00Z,,,Harvest Log,HAR-001
+initial_packing,TLC-FDA-PACKED,Romaine Lettuce,112,cases,Coastal Packhouse,2026-02-05T10:00:00Z,TLC-FDA-HARVEST,,Packout Record,PACK-001
+shipping,TLC-FDA-PACKED,Romaine Lettuce,112,cases,Coastal Packhouse,2026-02-05T12:00:00Z,,,Bill of Lading,BOL-001
+receiving,TLC-FDA-PACKED,Romaine Lettuce,112,cases,Distribution Center #4,2026-02-05T18:00:00Z,,,Bill of Lading,BOL-001
+transformation,TLC-FDA-OUT,Fresh Cut Salad Mix,95,cases,ReadyFresh Processing Plant,2026-02-06T09:00:00Z,,TLC-FDA-PACKED,Batch Record,BATCH-001
+"""
+    import_response = client.post(
+        "/api/import/csv",
+        json={
+            "import_type": "scheduled_events",
+            "csv_text": csv_text,
+            "delivery": {"mode": "none"},
+        },
+    )
+    assert import_response.status_code == 200
+    assert import_response.json()["accepted"] == 5
+
+    presets_response = client.get("/api/mock/regengine/export/presets")
+    assert presets_response.status_code == 200
+    preset_ids = [preset["id"] for preset in presets_response.json()["presets"]]
+    assert preset_ids == [
+        "all_records",
+        "lot_trace",
+        "shipment_handoff",
+        "receiving_log",
+        "transformation_batches",
+    ]
+
+    handoff_response = client.get("/api/mock/regengine/export/fda-request?preset=shipment_handoff")
+    assert handoff_response.status_code == 200
+    handoff_rows = parse_export_rows(handoff_response.text)
+    assert [row["Traceability Lot Code Description"] for row in handoff_rows] == [
+        "shipping",
+        "receiving",
+    ]
+    assert handoff_rows[0]["Reference Document Number"] == "BOL-001"
+    assert handoff_response.headers["content-disposition"] == (
+        "attachment; filename=fda_request_shipment_handoff.csv"
+    )
+
+    trace_response = client.get(
+        "/api/mock/regengine/export/fda-request?preset=lot_trace&traceability_lot_code=TLC-FDA-OUT"
+    )
+    assert trace_response.status_code == 200
+    trace_rows = parse_export_rows(trace_response.text)
+    assert [row["Traceability Lot Code"] for row in trace_rows] == [
+        "TLC-FDA-HARVEST",
+        "TLC-FDA-PACKED",
+        "TLC-FDA-PACKED",
+        "TLC-FDA-PACKED",
+        "TLC-FDA-OUT",
+    ]
+
+    receiving_response = client.get("/api/mock/regengine/export/fda-request?preset=receiving_log")
+    assert receiving_response.status_code == 200
+    receiving_rows = parse_export_rows(receiving_response.text)
+    assert [row["Traceability Lot Code Description"] for row in receiving_rows] == ["receiving"]
+
+    transformation_response = client.get(
+        "/api/mock/regengine/export/fda-request?preset=transformation_batches"
+    )
+    assert transformation_response.status_code == 200
+    transformation_rows = parse_export_rows(transformation_response.text)
+    assert [row["Traceability Lot Code"] for row in transformation_rows] == ["TLC-FDA-OUT"]
+
+    missing_lot_response = client.get("/api/mock/regengine/export/fda-request?preset=lot_trace")
+    assert missing_lot_response.status_code == 400
 
 
 def test_start_applies_configured_persist_path_and_keeps_mock_default(tmp_path):

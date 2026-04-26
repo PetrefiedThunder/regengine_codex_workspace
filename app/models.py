@@ -30,6 +30,14 @@ class CSVImportType(str, Enum):
     SEED_LOTS = "seed_lots"
 
 
+class FDAExportPreset(str, Enum):
+    ALL_RECORDS = "all_records"
+    LOT_TRACE = "lot_trace"
+    SHIPMENT_HANDOFF = "shipment_handoff"
+    RECEIVING_LOG = "receiving_log"
+    TRANSFORMATION_BATCHES = "transformation_batches"
+
+
 class RegEngineEvent(BaseModel):
     cte_type: CTEType
     traceability_lot_code: str
@@ -128,6 +136,17 @@ class ScenarioSummary(BaseModel):
 
 class ScenarioListResponse(BaseModel):
     scenarios: list[ScenarioSummary]
+
+
+class FDAExportPresetSummary(BaseModel):
+    id: FDAExportPreset
+    label: str
+    description: str
+    requires_lot_code: bool = False
+
+
+class FDAExportPresetListResponse(BaseModel):
+    presets: list[FDAExportPresetSummary]
 
 
 class StepResponse(BaseModel):
