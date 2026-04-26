@@ -4,6 +4,7 @@ import asyncio
 import json
 import logging
 import os
+import shutil
 import time
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
@@ -17,7 +18,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
-from .auth import DEFAULT_TENANT_ID, TenantContext, tenant_context_from_request
+from .auth import DEFAULT_TENANT_ID, TenantContext, normalize_tenant_id, tenant_context_from_request
 from .controller import SimulationController
 from .demo_fixtures import list_demo_fixture_summaries
 from .engine import LegitFlowEngine
@@ -61,6 +62,9 @@ from .models import (
     StartRequest,
     StatusResponse,
     StepResponse,
+    TenantListResponse,
+    TenantOperationResponse,
+    TenantSummary,
 )
 from .regengine_client import LiveRegEngineClient
 from .scenario_saves import ScenarioSaveStore
@@ -235,6 +239,7 @@ def _origin_from_url(raw_url: str) -> str | None:
         return None
     return f"{parsed.scheme}://{parsed.netloc}"
 
+
 static_dir = Path(__file__).parent / "static"
 app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
@@ -273,6 +278,47 @@ async def healthz() -> dict[str, Any]:
 async def simulate_status(request: Request) -> StatusResponse:
     status = _active_controller(request).status()
     return StatusResponse.model_validate(status)
+
+
+@app.get("/api/operator/tenants", response_model=TenantListResponse)
+async def list_operator_tenants(request: Request) -> TenantListResponse:
+    _require_operator_auth(request)
+    return TenantListResponse(
+        tenants=[
+            TenantSummary.model_validate(_tenant_summary(tenant_id))
+            for tenant_id in _known_tenant_ids()
+        ]
+    )
+
+
+@app.post("/api/operator/tenants/{tenant_id}/reset", response_model=TenantOperationResponse)
+async def reset_operator_tenant(request: Request, tenant_id: str) -> TenantOperationResponse:
+    _require_operator_auth(request)
+    normalized_tenant = _operator_tenant_id(tenant_id)
+    tenant_controller = _tenant_controller_for_id(normalized_tenant)
+    await tenant_controller.reset()
+    return TenantOperationResponse(status="reset", tenant_id=normalized_tenant)
+
+
+@app.delete("/api/operator/tenants/{tenant_id}", response_model=TenantOperationResponse)
+async def delete_operator_tenant(request: Request, tenant_id: str) -> TenantOperationResponse:
+    _require_operator_auth(request)
+    normalized_tenant = _operator_tenant_id(tenant_id)
+    tenant_dir = _tenant_dir(normalized_tenant)
+    removed_data = tenant_dir.exists()
+
+    with _tenant_lock:
+        tenant_controller = _tenant_controllers.pop(normalized_tenant, None)
+    if tenant_controller is not None:
+        await tenant_controller.shutdown()
+
+    shutil.rmtree(tenant_dir, ignore_errors=True)
+    return TenantOperationResponse(
+        status="deleted",
+        tenant_id=normalized_tenant,
+        removed_cached_controller=tenant_controller is not None,
+        removed_data=removed_data,
+    )
 
 
 @app.get("/api/scenarios", response_model=ScenarioListResponse)
@@ -539,14 +585,89 @@ def _active_controller(request: Request) -> SimulationController:
     if context.uses_default_storage:
         return controller
 
+    return _tenant_controller_for_id(context.tenant_id)
+
+
+def _tenant_controller_for_id(tenant_id: str) -> SimulationController:
     with _tenant_lock:
-        existing_controller = _tenant_controllers.get(context.tenant_id)
+        existing_controller = _tenant_controllers.get(tenant_id)
         if existing_controller is not None:
             return existing_controller
 
-        tenant_controller = _create_tenant_controller(context.tenant_id)
-        _tenant_controllers[context.tenant_id] = tenant_controller
+        tenant_controller = _create_tenant_controller(tenant_id)
+        _tenant_controllers[tenant_id] = tenant_controller
         return tenant_controller
+
+
+def _require_operator_auth(request: Request) -> None:
+    context = _tenant_context(request)
+    if not context.auth_enabled:
+        raise HTTPException(status_code=403, detail="Tenant operations require Basic Auth")
+
+
+def _operator_tenant_id(raw_tenant_id: str) -> str:
+    tenant_id = normalize_tenant_id(raw_tenant_id)
+    if tenant_id == DEFAULT_TENANT_ID:
+        raise HTTPException(status_code=400, detail="Default local tenant cannot be managed here")
+    return tenant_id
+
+
+def _known_tenant_ids() -> list[str]:
+    tenant_ids = set()
+    with _tenant_lock:
+        tenant_ids.update(
+            tenant_id for tenant_id in _tenant_controllers if tenant_id != DEFAULT_TENANT_ID
+        )
+
+    if TENANT_DATA_ROOT.exists():
+        for path in TENANT_DATA_ROOT.iterdir():
+            if path.is_dir():
+                try:
+                    tenant_ids.add(normalize_tenant_id(path.name))
+                except ValueError:
+                    continue
+    return sorted(tenant_ids)
+
+
+def _tenant_summary(tenant_id: str) -> dict[str, Any]:
+    tenant_dir = _tenant_dir(tenant_id)
+    persist_path = _tenant_events_path(tenant_id)
+    with _tenant_lock:
+        tenant_controller = _tenant_controllers.get(tenant_id)
+
+    if tenant_controller is not None:
+        stats = tenant_controller.store.stats()
+        running = tenant_controller.running
+        total_records = int(stats["total_records"])
+        persist_path_text = str(tenant_controller.store.persist_path)
+    else:
+        running = False
+        total_records = _count_jsonl_records(persist_path)
+        persist_path_text = str(persist_path)
+
+    return {
+        "tenant_id": tenant_id,
+        "cached": tenant_controller is not None,
+        "running": running,
+        "total_records": total_records,
+        "scenario_save_count": _count_scenario_saves(_tenant_saves_path(tenant_id)),
+        "persist_path": persist_path_text,
+        "data_path": str(tenant_dir),
+        "exists_on_disk": tenant_dir.exists(),
+    }
+
+
+def _count_jsonl_records(path: Path) -> int:
+    if not path.exists():
+        return 0
+    with path.open("r", encoding="utf-8") as handle:
+        return sum(1 for line in handle if line.strip())
+
+
+def _count_scenario_saves(path: Path) -> int:
+    if not path.exists():
+        return 0
+    return sum(1 for candidate in path.glob("*.json") if candidate.is_file())
 
 
 def _create_tenant_controller(tenant_id: str) -> SimulationController:

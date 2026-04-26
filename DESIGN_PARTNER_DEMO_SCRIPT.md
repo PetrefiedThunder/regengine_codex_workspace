@@ -131,6 +131,13 @@ export DEMO_PASSWORD="$(cat /tmp/regengine_inflow_lab_demo_basic_auth_password)"
 export DEMO_TENANT='partner-acme'
 ```
 
+List tenant scopes before a call:
+
+```bash
+curl -fsS -u "$DEMO_USERNAME:$DEMO_PASSWORD" \
+  "$DEMO_BASE_URL/api/operator/tenants" | python3 -m json.tool
+```
+
 Rotate the shared-demo password between external demos:
 
 ```bash
@@ -162,6 +169,14 @@ curl -fsS -u "$DEMO_USERNAME:$DEMO_PASSWORD" \
   -H 'Content-Type: application/json' \
   -X POST "$DEMO_BASE_URL/api/simulate/reset" \
   -d '{"scenario":"fresh_cut_processor","batch_size":3,"seed":204,"delivery":{"mode":"mock"}}'
+```
+
+Alternatively, clear only the selected tenant's stored event log through the operator endpoint:
+
+```bash
+curl -fsS -u "$DEMO_USERNAME:$DEMO_PASSWORD" \
+  -X POST "$DEMO_BASE_URL/api/operator/tenants/$DEMO_TENANT/reset" \
+  | python3 -m json.tool
 ```
 
 Load the fresh-cut fixture in mock mode:
@@ -213,6 +228,7 @@ Post-call cleanup checklist:
 
 - Stop the simulation loop for the demo tenant.
 - Reset the tenant if the partner should not retain event history.
+- Delete the tenant with `DELETE /api/operator/tenants/$DEMO_TENANT` only when scenario saves and event history should both be removed.
 - Rotate the shared password after external demos.
 - Do not commit generated exports, request logs, tenant event data, or local credential files.
 - Capture product feedback and missing CTE/KDE notes in the follow-up tracker, not in fixture data.

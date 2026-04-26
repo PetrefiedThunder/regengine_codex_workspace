@@ -187,6 +187,14 @@ export REGENGINE_CORS_ORIGINS=https://demo.example.com,https://partner-demo.exam
 
 Wildcard CORS origins are rejected because Basic Auth and tenant-scoped requests may carry credentials. When Basic Auth is enabled, state-changing browser requests such as simulator start, step, reset, fixture load, import, replay, retry, and scenario save/load must present a trusted `Origin` or `Referer` from `REGENGINE_CORS_ORIGINS`; command-line and server-to-server calls without browser origin headers continue to work with valid Basic credentials.
 
+Protected tenant operations are available when Basic Auth is enabled:
+
+- `GET /api/operator/tenants` lists cached and on-disk tenant scopes, record counts, scenario-save counts, and storage paths.
+- `POST /api/operator/tenants/{tenant_id}/reset` stops that tenant's loop and clears its event log while preserving the tenant directory and scenario saves.
+- `DELETE /api/operator/tenants/{tenant_id}` stops that tenant's loop, evicts its cached controller, and deletes its tenant data directory.
+
+These endpoints reject unauthenticated requests and reject the default local tenant so the unprotected local demo surface stays simple.
+
 ## Replay mode
 
 Replay mode reads previously persisted `StoredEventRecord` JSONL lines, rebuilds the RegEngine ingest payload as:
@@ -328,6 +336,9 @@ The service wrapper examples below can be used with any profile; keep the profil
 | `GET` | `/api/demo-fixtures` | List deterministic demo playback fixtures |
 | `POST` | `/api/demo-fixtures/{fixture_id}/load` | Load a deterministic fixture into the event store |
 | `GET` | `/api/simulate/status` | Running state, config, and aggregate stats |
+| `GET` | `/api/operator/tenants` | List protected tenant scopes and storage counts |
+| `POST` | `/api/operator/tenants/{tenant_id}/reset` | Reset one protected tenant event log |
+| `DELETE` | `/api/operator/tenants/{tenant_id}` | Delete one protected tenant data directory |
 | `POST` | `/api/simulate/start` | Start the loop (accepts a `config` body) |
 | `POST` | `/api/simulate/stop` | Stop the loop |
 | `POST` | `/api/simulate/step` | Emit one batch synchronously |
