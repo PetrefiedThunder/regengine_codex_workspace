@@ -26,7 +26,7 @@ This file is the standing backlog for unattended Codex runs.
 
 ## Priority 3
 
-- [ ] Add EPCIS 2.0 export scaffolding without breaking the current webhook contract.
+- [x] Add EPCIS 2.0 export scaffolding without breaking the current webhook contract.
 - [ ] Add per-scenario save/load support.
 - [ ] Add basic auth and tenant-scoped storage boundaries.
 
