@@ -65,7 +65,6 @@ class DeliveryConfig(BaseModel):
     endpoint: HttpUrl | None = None
     api_key: str | None = None
     tenant_id: str | None = None
-    live_confirmed: bool = False
 
 
 class SimulationConfig(BaseModel):

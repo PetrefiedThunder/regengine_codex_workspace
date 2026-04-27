@@ -86,7 +86,6 @@ function buildConfig() {
       endpoint: endpoint || null,
       api_key: apiKey || null,
       tenant_id: tenantId || null,
-      live_confirmed: ids.liveConfirmed.checked,
     },
   };
 }
