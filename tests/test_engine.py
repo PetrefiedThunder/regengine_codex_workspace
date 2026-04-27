@@ -71,6 +71,10 @@ def test_engine_emits_regengine_canonical_kdes_for_lab_contract():
     harvesting = seen[CTEType.HARVESTING]
     assert "reference_document_type" in harvesting.kdes
     assert "reference_document_number" in harvesting.kdes
+    # Required for RegEngine ingest contract — webhook_router_v2 KDE
+    # validator looks for the combined `reference_document` field on
+    # harvesting events, not just the split type/number fields.
+    assert harvesting.kdes["reference_document"]
 
     initial_packing = seen[CTEType.INITIAL_PACKING]
     assert initial_packing.kdes["packing_date"]
