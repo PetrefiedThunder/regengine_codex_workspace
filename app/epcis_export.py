@@ -14,6 +14,7 @@ _BIZ_STEPS = {
     CTEType.HARVESTING: "urn:epcglobal:cbv:bizstep:commissioning",
     CTEType.COOLING: "urn:epcglobal:cbv:bizstep:storing",
     CTEType.INITIAL_PACKING: "urn:epcglobal:cbv:bizstep:packing",
+    CTEType.FIRST_LAND_BASED_RECEIVING: "urn:epcglobal:cbv:bizstep:receiving",
     CTEType.SHIPPING: "urn:epcglobal:cbv:bizstep:shipping",
     CTEType.RECEIVING: "urn:epcglobal:cbv:bizstep:receiving",
     CTEType.TRANSFORMATION: "urn:epcglobal:cbv:bizstep:transforming",
@@ -23,6 +24,7 @@ _DISPOSITIONS = {
     CTEType.HARVESTING: "urn:epcglobal:cbv:disp:active",
     CTEType.COOLING: "urn:epcglobal:cbv:disp:active",
     CTEType.INITIAL_PACKING: "urn:epcglobal:cbv:disp:active",
+    CTEType.FIRST_LAND_BASED_RECEIVING: "urn:epcglobal:cbv:disp:active",
     CTEType.SHIPPING: "urn:epcglobal:cbv:disp:in_transit",
     CTEType.RECEIVING: "urn:epcglobal:cbv:disp:active",
     CTEType.TRANSFORMATION: "urn:epcglobal:cbv:disp:active",
@@ -32,6 +34,7 @@ _OBJECT_ACTIONS = {
     CTEType.HARVESTING: "ADD",
     CTEType.COOLING: "OBSERVE",
     CTEType.INITIAL_PACKING: "ADD",
+    CTEType.FIRST_LAND_BASED_RECEIVING: "ADD",
     CTEType.SHIPPING: "OBSERVE",
     CTEType.RECEIVING: "OBSERVE",
 }
