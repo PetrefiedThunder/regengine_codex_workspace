@@ -22,7 +22,8 @@ DEFAULT_LIVE_INGEST_ENDPOINT = "https://www.regengine.co/api/v1/webhooks/ingest"
 # When unset, signing is skipped — RegEngine's _verify_webhook_signature
 # also no-ops when its WEBHOOK_HMAC_SECRET is unset, so this preserves the
 # pre-signing migration ramp on both sides.
-WEBHOOK_HMAC_SECRET_ENV = "REGENGINE_WEBHOOK_HMAC_SECRET"
+# Bandit B105 false positive: this is an env var key, not a secret literal.
+WEBHOOK_HMAC_SECRET_ENV = "REGENGINE_WEBHOOK_HMAC_SECRET"  # nosec B105
 
 
 @dataclass(frozen=True, slots=True)
