@@ -14,6 +14,14 @@ class CTEType(str, Enum):
     HARVESTING = "harvesting"
     COOLING = "cooling"
     INITIAL_PACKING = "initial_packing"
+    # First land-based receiving — RegEngine's WebhookCTEType supports
+    # this CTE per 21 CFR §1.1325 (seafood / first-receiver flows). The
+    # default LegitFlowEngine doesn't emit it yet because the current
+    # scenarios are leafy-greens / fresh-cut / retailer-handoff. Including
+    # the value keeps it valid for CSV imports, hand-crafted fixtures, and
+    # future seafood scenarios so the simulator can exercise the same
+    # webhook code path RegEngine validates against.
+    FIRST_LAND_BASED_RECEIVING = "first_land_based_receiving"
     SHIPPING = "shipping"
     RECEIVING = "receiving"
     TRANSFORMATION = "transformation"

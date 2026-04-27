@@ -168,6 +168,7 @@ class LegitFlowEngine:
                 "farm_location": farm.name,
                 "field_name": f"Field-{self.rng.randint(1, 18)}",
                 "immediate_subsequent_recipient": self.rng.choice(self.coolers).name,
+                "reference_document": self._reference_document(lot.current_reference_type, reference_number),
                 "reference_document_type": lot.current_reference_type,
                 "reference_document_number": reference_number,
                 "traceability_lot_code_source_reference": lot.tlc_source_reference,

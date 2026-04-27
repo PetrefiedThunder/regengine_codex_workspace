@@ -39,7 +39,20 @@ def test_harvest_immediate_subsequent_recipients_are_coolers():
 
 def test_engine_emits_all_supported_ctes_and_lineage():
     engine = LegitFlowEngine(seed=204)
-    expected_ctes = set(CTEType)
+    # CTEs the default LegitFlowEngine actively emits across the
+    # leafy-greens / fresh-cut / retailer scenarios. CTEType also
+    # includes FIRST_LAND_BASED_RECEIVING (21 CFR §1.1325) for
+    # contract parity with RegEngine's webhook ingest, but it is
+    # intentionally not part of this engine's flow until a seafood
+    # scenario is added.
+    expected_ctes = {
+        CTEType.HARVESTING,
+        CTEType.COOLING,
+        CTEType.INITIAL_PACKING,
+        CTEType.SHIPPING,
+        CTEType.RECEIVING,
+        CTEType.TRANSFORMATION,
+    }
     seen = set()
     parent_links = 0
 
@@ -71,6 +84,10 @@ def test_engine_emits_regengine_canonical_kdes_for_lab_contract():
     harvesting = seen[CTEType.HARVESTING]
     assert "reference_document_type" in harvesting.kdes
     assert "reference_document_number" in harvesting.kdes
+    # Required for RegEngine ingest contract — webhook_router_v2 KDE
+    # validator looks for the combined `reference_document` field on
+    # harvesting events, not just the split type/number fields.
+    assert harvesting.kdes["reference_document"]
 
     initial_packing = seen[CTEType.INITIAL_PACKING]
     assert initial_packing.kdes["packing_date"]

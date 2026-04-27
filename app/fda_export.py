@@ -48,13 +48,21 @@ FDA_EXPORT_PRESETS = {
         id=FDAExportPreset.SHIPMENT_HANDOFF,
         label="Shipment handoff",
         description="Shipping and receiving records with reference documents.",
-        cte_types=frozenset({CTEType.SHIPPING, CTEType.RECEIVING}),
+        cte_types=frozenset(
+            {
+                CTEType.SHIPPING,
+                CTEType.RECEIVING,
+                CTEType.FIRST_LAND_BASED_RECEIVING,
+            }
+        ),
     ),
     FDAExportPreset.RECEIVING_LOG: FDAExportPresetDefinition(
         id=FDAExportPreset.RECEIVING_LOG,
         label="Receiving log",
         description="Receiving records for destination-focused FDA requests.",
-        cte_types=frozenset({CTEType.RECEIVING}),
+        cte_types=frozenset(
+            {CTEType.RECEIVING, CTEType.FIRST_LAND_BASED_RECEIVING}
+        ),
     ),
     FDAExportPreset.TRANSFORMATION_BATCHES: FDAExportPresetDefinition(
         id=FDAExportPreset.TRANSFORMATION_BATCHES,
